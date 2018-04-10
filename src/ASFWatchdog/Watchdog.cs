@@ -7,6 +7,8 @@ using System.Linq;
 
 namespace ASFWatchdog
 {
+    using System.Threading.Tasks;
+
     public class Watchdog
     {
         private static FabricClient _fabricClient;
@@ -24,32 +26,32 @@ namespace ASFWatchdog
             }
         }
 
-        public async void InterrogateAppHealth()
+        public async Task InterrogateAppHealth()
         {
             foreach (Application application in await _fabricClient.QueryManager.GetApplicationListAsync())
             {
                 if (application.ApplicationName.ToString().ToLower().Contains("watchdog"))
                     continue;
 
-                CheckHealth(application);
+                await CheckHealth(application);
             }
         }
 
-        private async void CheckHealth(Application application)
+        private async Task CheckHealth(Application application)
         {
             Console.WriteLine($"Checking service health for application: '{application.ApplicationName}");
 
-            if (application.HealthState != HealthState.Ok 
-                    && application.HealthState != HealthState.Unknown
-                        && application.ApplicationStatus != ApplicationStatus.Upgrading
-                            && application.ApplicationStatus != ApplicationStatus.Creating)
+            if (application.HealthState != HealthState.Ok && 
+                application.HealthState != HealthState.Unknown && 
+                application.ApplicationStatus != ApplicationStatus.Upgrading && 
+                application.ApplicationStatus != ApplicationStatus.Creating)
             {
                 foreach (var service in await _fabricClient.QueryManager.GetServiceListAsync(application.ApplicationName))
                 {
-                    if (service.HealthState != HealthState.Ok 
-                            && service.HealthState != HealthState.Unknown 
-                                && service.ServiceStatus != ServiceStatus.Upgrading 
-                                    && service.ServiceStatus != ServiceStatus.Creating)
+                    if (service.HealthState != HealthState.Ok && 
+                        service.HealthState != HealthState.Unknown && 
+                        service.ServiceStatus != ServiceStatus.Upgrading && 
+                        service.ServiceStatus != ServiceStatus.Creating)
                     {
                         try
                         {
@@ -67,11 +69,11 @@ namespace ASFWatchdog
                 var appServices = await _fabricClient.QueryManager.GetServiceListAsync(application.ApplicationName);
 
                 if (!appServices.Any())
-                    RemoveApplication(application);
+                    await RemoveApplication(application);
             }
         }
 
-        private async void RemoveApplication(Application application)
+        private async Task RemoveApplication(Application application)
         {
             var services = _fabricClient.QueryManager.GetServiceListAsync(application.ApplicationName).Result;
 
@@ -82,8 +84,8 @@ namespace ASFWatchdog
                 try
                 {
                     await _fabricClient.ApplicationManager.DeleteApplicationAsync(new DeleteApplicationDescription(application.ApplicationName));
-                    await _fabricClient.ApplicationManager.UnprovisionApplicationAsync(new UnprovisionApplicationTypeDescription(application.ApplicationTypeName,
-                            application.ApplicationTypeVersion));
+                    await _fabricClient.ApplicationManager.UnprovisionApplicationAsync(
+                        new UnprovisionApplicationTypeDescription(application.ApplicationTypeName, application.ApplicationTypeVersion));
                 }
                 catch (Exception ex)
                 {

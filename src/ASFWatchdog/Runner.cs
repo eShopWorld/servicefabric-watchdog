@@ -10,7 +10,7 @@ namespace ASFWatchdog
     {
         private static IConfiguration Configuration { get; set; }
 
-        public static void Main(string[] args)
+        public static async Task Main(string[] args)
         {
             var configBuilder = new ConfigurationBuilder()
                 .SetBasePath(Directory.GetCurrentDirectory())
@@ -24,9 +24,9 @@ namespace ASFWatchdog
 
             while (!cts.IsCancellationRequested)
             {
-                watchdog.InterrogateAppHealth();
+                await watchdog.InterrogateAppHealth();
 
-                Task.Delay(int.Parse(Configuration["schedule"]) * 1000);
+                await Task.Delay(int.Parse(Configuration["schedule"]) * 1000, cts.Token);
             }
         }
     }
