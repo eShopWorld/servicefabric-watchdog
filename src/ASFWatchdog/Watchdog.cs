@@ -1,23 +1,32 @@
 ﻿using System;
+using System.Fabric;
+using System.Fabric.Description;
 using System.Fabric.Health;
 using System.Fabric.Query;
 using System.Linq;
-using System.Threading;
 
 namespace ASFWatchdog
 {
     public class Watchdog
     {
-        private static IFabricClientAdapter _fabricClientAdapter;
+        private static FabricClient _fabricClient;
 
-        public Watchdog(IFabricClientAdapter fabricClientAdapter)
+        public Watchdog()
         {
-            _fabricClientAdapter = fabricClientAdapter;
+            try
+            {
+                _fabricClient = new FabricClient();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Unable to connect to the fabric, exception: {ex.Message}");
+                throw;
+            }
         }
 
-        public void InterogateAppHealth()
+        public async void InterrogateAppHealth()
         {
-            foreach (var application in _fabricClientAdapter.GetApplications())
+            foreach (Application application in await _fabricClient.QueryManager.GetApplicationListAsync())
             {
                 if (application.ApplicationName.ToString().ToLower().Contains("watchdog"))
                     continue;
@@ -26,7 +35,7 @@ namespace ASFWatchdog
             }
         }
 
-        protected void CheckHealth(IFabricApplication application)
+        private async void CheckHealth(Application application)
         {
             Console.WriteLine($"Checking service health for application: '{application.ApplicationName}");
 
@@ -35,21 +44,52 @@ namespace ASFWatchdog
                         && application.ApplicationStatus != ApplicationStatus.Upgrading
                             && application.ApplicationStatus != ApplicationStatus.Creating)
             {
-                var services = _fabricClientAdapter.GetApplicationServices(application.ApplicationName);
-
-                foreach (var service in services)
+                foreach (var service in await _fabricClient.QueryManager.GetServiceListAsync(application.ApplicationName))
                 {
                     if (service.HealthState != HealthState.Ok 
                             && service.HealthState != HealthState.Unknown 
                                 && service.ServiceStatus != ServiceStatus.Upgrading 
                                     && service.ServiceStatus != ServiceStatus.Creating)
                     {
-                        _fabricClientAdapter.RemoveService(service.ServiceName);
+                        try
+                        {
+                            Console.WriteLine($"Removing unhealthy service:'{service.ServiceName}");
+                            await _fabricClient.ServiceManager.DeleteServiceAsync(new DeleteServiceDescription(service.ServiceName));
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"Unable to delete the service: '{service.ServiceName}', exception: {ex.Message}");
+                            throw;
+                        }
                     }
                 }
 
-                if(!_fabricClientAdapter.GetApplicationServices(application.ApplicationName).Any())
-                    _fabricClientAdapter.RemoveApplication(application);
+                var appServices = await _fabricClient.QueryManager.GetServiceListAsync(application.ApplicationName);
+
+                if (!appServices.Any())
+                    RemoveApplication(application);
+            }
+        }
+
+        private async void RemoveApplication(Application application)
+        {
+            var services = _fabricClient.QueryManager.GetServiceListAsync(application.ApplicationName).Result;
+
+            if (services.Count == 0)
+            {
+                Console.WriteLine($"No services on the application, removing application:'{application.ApplicationName}");
+
+                try
+                {
+                    await _fabricClient.ApplicationManager.DeleteApplicationAsync(new DeleteApplicationDescription(application.ApplicationName));
+                    await _fabricClient.ApplicationManager.UnprovisionApplicationAsync(new UnprovisionApplicationTypeDescription(application.ApplicationTypeName,
+                            application.ApplicationTypeVersion));
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Unable to delete/unprovision the application: '{application.ApplicationName}', exception: {ex.Message}");
+                    throw;
+                }
             }
         }
     }
