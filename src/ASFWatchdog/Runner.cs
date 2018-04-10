@@ -24,8 +24,15 @@ namespace ASFWatchdog
 
             var watchdog = new Watchdog(Container.Resolve<FabricClientAdapter>());
 
+            CancellationTokenSource cts = new CancellationTokenSource();
+
             while (true)
             {
+                if (cts.IsCancellationRequested)
+                {
+                    break;
+                }
+
                 watchdog.InterogateAppHealth();
 
                 Thread.Sleep(int.Parse(Configuration["schedule"]) * 1000);
