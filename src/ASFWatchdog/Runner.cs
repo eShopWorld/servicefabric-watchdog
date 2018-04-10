@@ -26,13 +26,8 @@ namespace ASFWatchdog
 
             CancellationTokenSource cts = new CancellationTokenSource();
 
-            while (true)
+            while (!cts.IsCancellationRequested)
             {
-                if (cts.IsCancellationRequested)
-                {
-                    break;
-                }
-
                 watchdog.InterogateAppHealth();
 
                 Thread.Sleep(int.Parse(Configuration["schedule"]) * 1000);
